@@ -5,9 +5,14 @@ from datetime import datetime
 from typing import Optional
 from collections import Counter, defaultdict
 
-scope = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+import os
+import json
 
-creds = Credentials.from_service_account_file("service_account.json", scopes=scope)
+# Load the JSON string from environment variables
+service_account_info = json.loads(os.environ.get("GOOGLE_SERVICE_ACCOUNT"))
+
+scope = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+creds = Credentials.from_service_account_info(service_account_info, scopes=scope)
 
 client = gspread.authorize(creds)
 
