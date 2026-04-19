@@ -1,6 +1,13 @@
 from fastapi import FastAPI, Depends
 from auth import verify_api_key
-from sheets import get_sheet_data, get_milestone_sheet_data
+from sheets import (
+    get_sheet_data,
+    get_milestone_sheet_data,
+    get_project_details,
+    get_kpi_summary,
+    get_recent_issues_log,
+    get_issue_analytics,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, date
 from typing import Optional
@@ -27,7 +34,6 @@ def fetch_data(
 ):
     all_data = get_sheet_data()
     filtered_data = all_data
-
 
     if filter == "risk":
         filtered_data = [
@@ -113,6 +119,13 @@ def get_milestones(
     return {"data": filtered_data}
 
 
+@app.get("/projects/{project_name}")
+def fetch_project_by_id(project_name: str, api_key: str = Depends(verify_api_key)):
+    data = get_project_details(project_name)
+
+    return {"data": data}
+
+
 @app.get("/risks")
 def get_risks(api_key: str = Depends(verify_api_key)):
 
@@ -121,7 +134,6 @@ def get_risks(api_key: str = Depends(verify_api_key)):
     risk_data = [
         m for m in all_milestones if m["raw_status"].lower() in ["red", "amber"]
     ]
-
 
     def sort_logic(item):
         priority = 0 if item["raw_status"].lower() == "red" else 1
@@ -138,12 +150,56 @@ def get_risks(api_key: str = Depends(verify_api_key)):
         final_format.append(
             {
                 "level": "Critical" if m["raw_status"].lower() == "red" else "At Risk",
-                "text": m["title"],
+                "text": m["milestone"],
                 "owner": m.get("project", "Unknown Project"),
             }
         )
 
     return {"data": final_format}
+
+
+@app.get("/ticket/issues-summary")
+def fetch_project_kpis(
+    project_name: Optional[str] = None, api_key: str = Depends(verify_api_key)
+):
+    """
+    Query Param: ?project_name=MyProject
+    If no project_name is provided, it returns aggregated stats for all projects.
+    """
+    data = get_kpi_summary(project_name)
+
+    return {"data": data}
+
+
+@app.get("/ticket/issues-log")
+def fetch_project_issues_log(
+    project_name: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 10,
+    api_key: str = Depends(verify_api_key),
+):
+    """
+    Query Param: ?project_name=MyProject&page=1&page_size=10
+    """
+    log_data = get_recent_issues_log(project_name, page, page_size)
+
+    return {
+        "data": log_data["data"],
+        "meta": {
+            "current_page": log_data["page"],
+            "has_more": log_data["has_more"],
+            "total_records": log_data["total_count"],
+        },
+    }
+
+
+@app.get("/ticket/rca-summary")
+def fetch_project_issues_Analytics(api_key: str = Depends(verify_api_key)):
+    log_data = get_issue_analytics()
+
+    return {
+        "data": log_data,
+    }
 
 
 if __name__ == "__main__":
