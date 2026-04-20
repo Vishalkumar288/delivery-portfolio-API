@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Query
 from auth import verify_api_key
 from sheets import (
     get_sheet_data,
@@ -8,6 +8,7 @@ from sheets import (
     get_recent_issues_log,
     get_issue_analytics,
 )
+from utils import apply_common_filters
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, date
 from typing import Optional
@@ -29,23 +30,99 @@ def home():
 
 @app.get("/projects")
 def fetch_data(
-    filter: Optional[str] = None,
+    project: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    stream: Optional[str] = Query(None),
+    owner: Optional[str] = Query(None),
     api_key: str = Depends(verify_api_key),
 ):
     all_data = get_sheet_data()
-    filtered_data = all_data
+    filtered_data = apply_common_filters(all_data, project, status, stream, owner)
+    return {"data": filtered_data}
 
-    if filter == "risk":
-        filtered_data = [
-            item for item in filtered_data if item["status"].lower() == "at risk"
-        ]
 
-    if filter and filter != "risk":
-        filtered_data = [
-            item for item in filtered_data if item["stream"].lower() == filter.lower()
-        ]
+@app.get("/milestones")
+def get_milestones(
+    project: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    stream: Optional[str] = Query(None),
+    owner: Optional[str] = Query(None),
+    from_date: Optional[date] = Query(None),
+    to_date: Optional[date] = Query(None),
+    api_key: str = Depends(verify_api_key),
+):
+    # Fetch Milestone data
+    all_milestones = get_milestone_sheet_data()
+    # Fetch Project Master data (for the lookup)
+    all_projects = get_sheet_data()
+
+    # 1. Apply common filters (passing both datasets)
+    filtered_data = apply_common_filters(
+        all_milestones, project, status, stream, owner, all_projects=all_projects
+    )
+
+    # 2. Apply Date Filtering
+    if from_date or to_date:
+        final_list = []
+        for item in filtered_data:
+            try:
+                # Ensure we handle the date string correctly
+                item_date = datetime.strptime(item["date"], "%Y-%m-%d").date()
+                if from_date and item_date < from_date:
+                    continue
+                if to_date and item_date > to_date:
+                    continue
+                final_list.append(item)
+            except Exception:
+                continue
+        filtered_data = final_list
 
     return {"data": filtered_data}
+
+
+@app.get("/risks")
+def get_risks(
+    project: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    stream: Optional[str] = Query(None),
+    owner: Optional[str] = Query(None),
+    api_key: str = Depends(verify_api_key),
+):
+    all_milestones = get_milestone_sheet_data()
+    all_projects = get_sheet_data()
+
+    # 1. Apply common filters (passing both datasets)
+    filtered_data = apply_common_filters(
+        all_milestones, project, status, stream, owner, all_projects=all_projects
+    )
+
+    # 2. Filter for risks only (Red/Amber)
+    risk_data = [
+        m for m in filtered_data if m["raw_status"].lower() in ["red", "amber"]
+    ]
+
+    # 3. Sort logic
+    def sort_logic(item):
+        priority = 0 if item["raw_status"].lower() == "red" else 1
+        try:
+            dt = datetime.strptime(item["date"], "%Y-%m-%d")
+        except:
+            dt = datetime.max
+        return (priority, dt)
+
+    sorted_risks = sorted(risk_data, key=sort_logic)
+
+    # 4. Final format for UI
+    final_format = [
+        {
+            "level": "Critical" if m["raw_status"].lower() == "red" else "At Risk",
+            "text": m["milestone"],
+            "owner": m.get("project", "Unknown Project"),
+        }
+        for m in sorted_risks
+    ]
+
+    return {"data": final_format}
 
 
 @app.get("/projects-progress")
@@ -89,73 +166,11 @@ def get_projects_progress(api_key: str = Depends(verify_api_key)):
     }
 
 
-@app.get("/milestones")
-def get_milestones(
-    from_date: Optional[date] = None,
-    to_date: Optional[date] = None,
-    api_key: str = Depends(verify_api_key),
-):
-    all_data = get_milestone_sheet_data()
-    filtered_data = all_data
-
-    if from_date or to_date:
-        final_list = []
-        for item in filtered_data:
-            try:
-                # Since we standardized to %Y-%m-%d in the transform function:
-                item_date = datetime.strptime(item["date"], "%Y-%m-%d").date()
-
-                if from_date and item_date < from_date:
-                    continue
-                if to_date and item_date > to_date:
-                    continue
-                final_list.append(item)
-            except Exception as e:
-                # If date is invalid ("TBD"), skip filtering for this item
-                print(f"Skipping row due to date error: {e}")
-                continue
-        filtered_data = final_list
-
-    return {"data": filtered_data}
-
-
 @app.get("/projects/{project_name}")
 def fetch_project_by_id(project_name: str, api_key: str = Depends(verify_api_key)):
     data = get_project_details(project_name)
 
     return {"data": data}
-
-
-@app.get("/risks")
-def get_risks(api_key: str = Depends(verify_api_key)):
-
-    all_milestones = get_milestone_sheet_data()
-
-    risk_data = [
-        m for m in all_milestones if m["raw_status"].lower() in ["red", "amber"]
-    ]
-
-    def sort_logic(item):
-        priority = 0 if item["raw_status"].lower() == "red" else 1
-        try:
-            dt = datetime.strptime(item["date"], "%Y-%m-%d")
-        except:
-            dt = datetime.max
-        return (priority, dt)
-
-    sorted_risks = sorted(risk_data, key=sort_logic)
-
-    final_format = []
-    for m in sorted_risks:
-        final_format.append(
-            {
-                "level": "Critical" if m["raw_status"].lower() == "red" else "At Risk",
-                "text": m["milestone"],
-                "owner": m.get("project", "Unknown Project"),
-            }
-        )
-
-    return {"data": final_format}
 
 
 @app.get("/ticket/issues-summary")
@@ -202,7 +217,49 @@ def fetch_project_issues_Analytics(api_key: str = Depends(verify_api_key)):
     }
 
 
+@app.get("/filters/delivery-portfolio")
+def get_filter_options(api_key: str = Depends(verify_api_key)):
+    all_data = get_sheet_data()
+
+    # Using sets to collect unique values efficiently
+    unique_projects = set()
+    unique_statuses = set()
+    unique_streams = set()
+    unique_owners = set()
+
+    for item in all_data:
+        if item["name"]:
+            unique_projects.add(item["name"])
+        if item["status"]:
+            unique_statuses.add(item["status"])
+        if item["stream"]:
+            unique_streams.add(item["stream"])
+        if item["owner"]:
+            unique_owners.add(item["owner"])
+
+    # Helper function to format for the Frontend DropDown component
+    def format_options(unique_set):
+        # Sorting ensures the dropdown looks organized
+        return sorted(
+            [
+                {"name": val, "displayName": val}
+                for val in unique_set
+                if val and val != "N/A"
+            ],
+            key=lambda x: x["displayName"],
+        )
+
+    return {
+        "data": {
+            "projects": format_options(unique_projects),
+            "status": format_options(unique_statuses),
+            "stream": format_options(unique_streams),
+            "owner": format_options(unique_owners),
+        }
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
