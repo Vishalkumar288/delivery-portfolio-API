@@ -21,7 +21,7 @@ def get_high_level_data():
             "progress": int(clean.get("percent_completed", 0)),
             "budget": {"used": clean.get("budget_used", 0), "total": clean.get("budget_total", 0)},
             "eta": format_date_to_iso(clean.get("project_end_date")),
-            "startDate": format_date_to_iso(clean.get("project_start_date"))
+            "startDate": format_date_to_iso(clean.get("project_start_date")),
             "owner": clean.get("delivery_manager", "N/A"),
             "updatedOn":format_date_to_iso(clean.get("status_moved_from")),
             "blocker": clean.get("blocker", "NIL"),
