@@ -7,7 +7,7 @@ STATUS_MAP = {"Green": "On track", "Amber": "At risk", "Red": "Critical"}
 
 
 def get_high_level_data():
-    raw_data = get_worksheet_data(0)
+    raw_data = get_worksheet_data("At High Level")
     transformed = []
     for index, row in enumerate(raw_data, start=1):
         clean = {
@@ -20,9 +20,11 @@ def get_high_level_data():
                 "id": index,
                 "name": str(project_display).lower().replace(" ", "-"),
                 "displayName": project_display,
+                "client": clean.get("client", "--"),
                 "project": project_display,
                 "stream": clean.get("stream", "N/A"),
-                "status": STATUS_MAP.get(clean.get("rag"), "On hold"),
+                "rag": STATUS_MAP.get(clean.get("rag"), "On hold"),
+                "status": clean.get("status", "N/A"),
                 "progress": (
                     int(clean.get("percent_completed", 0))
                     if str(clean.get("percent_completed", 0)).isdigit()
@@ -51,15 +53,15 @@ def get_high_level_data():
 
 def get_milestones_and_risk_data():
     try:
-        raw_data = get_worksheet_data(3)
+        raw_data = get_worksheet_data("Milestone")
         return [
             {
                 "id": i,
                 "due_date": format_date_to_iso(r.get("Due Date")),
                 "milestone": r.get("Milestone") or "Untitled Milestone",
                 "project": r.get("Project") or "Untitled Project",
-                "status": STATUS_MAP.get(r.get("Status"), "PENDING"),
-                "raw_status": r.get("Status"),
+                "status": STATUS_MAP.get(r.get("RAG"), "PENDING"),
+                "raw_status": r.get("RAG"),
             }
             for i, r in enumerate(raw_data, 1)
         ]
@@ -150,7 +152,7 @@ def get_project_progress_stats():
     }
 
     for i in data:
-        stat = i.get("status", "").lower()
+        stat = i.get("rag", "").lower()
         if stat in status_counts:
             status_counts[stat].append(i)
 
@@ -270,7 +272,7 @@ def get_project_details(target_project: str):
                 "due_date": format_date_to_iso(m.get("Due Date")),
                 "milestone": m.get("Milestone"),
                 "completion": m.get("% Completion"),
-                "status": STATUS_MAP.get(m.get("Status"), "Unknown"),
+                "status": STATUS_MAP.get(m.get("RAG"), "Unknown"),
             }
             for m in milestone_rows
             if m.get("Project") == actual_name

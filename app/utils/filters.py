@@ -43,6 +43,6 @@ def apply_common_filters(data, project, status, stream, owner, all_projects=None
         filtered = [i for i in filtered if project.lower() in i.get("name", "").lower()]
     if status:
         filtered = [
-            i for i in filtered if i.get("status", "").lower() == status.lower()
+            i for i in filtered if i.get("rag", "").lower() == status.lower()
         ]
     return filtered
