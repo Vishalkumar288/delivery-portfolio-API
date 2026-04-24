@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .api.routes import delivery, tickets, analytics
+from app.api.routes import delivery, tickets, analytics
 #from .core.config import ALLOWED_ORIGINS
 
 app = FastAPI(title="Project Management API")
