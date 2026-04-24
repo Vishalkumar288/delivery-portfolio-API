@@ -3,7 +3,12 @@ from app.utils.filters import format_date_to_iso, apply_common_filters
 from datetime import date, datetime, timedelta
 from typing import Optional
 
-STATUS_MAP = {"Green": "On track", "Amber": "At risk", "Red": "Critical"}
+STATUS_MAP = {
+    "Green": "On track",
+    "Amber": "At risk",
+    "Red": "Critical",
+    "Yet To Start": "Yet To Start",
+}
 
 
 def get_high_level_data():
@@ -202,11 +207,9 @@ def get_project_progress_stats():
 
 
 def get_project_details(target_project: str):
-    """
-    Fetches comprehensive details for a specific project by its name/slug.
-    """
     slug = target_project.lower().replace(" ", "-")
     detailed = get_worksheet_data("Detailed Level")
+
     project_main = next(
         (
             r
@@ -222,9 +225,15 @@ def get_project_details(target_project: str):
     actual_name = project_main.get("Project Name")
     team_rows = get_worksheet_data("Team Allocation")
     milestone_rows = get_worksheet_data("Milestone")
-
-    STATUS_MAP = {"Green": "On track", "Amber": "At risk", "Red": "Critical"}
-
+    model_rows = get_worksheet_data("Model Details")
+    model = next(
+        (
+            row
+            for row in model_rows
+            if str(row.get("Project Name")).strip() == actual_name
+        ),
+        None,
+    )
     last_seen, project_team = "", []
     for t in team_rows:
         val = str(t.get("Project Name", "")).strip()
@@ -250,9 +259,20 @@ def get_project_details(target_project: str):
             "tenure": project_main.get("Tenure"),
             "type": project_main.get("Project Type"),
         },
+        "model_details": (
+            {
+                "llm_model": model.get("LLM Model") if model else "TBC",
+                "embedding_model": model.get("Embedding Model") if model else "TBC",
+                "reranker_model": model.get("Reranker Model") if model else "TBC",
+                "ocr_model": model.get("OCR Model") if model else "TBC",
+                "judge_model": model.get("LLM As Judge Model") if model else "TBC",
+            }
+            if model
+            else None
+        ),
         "status_metrics": {
             "rag": project_main.get("RAG"),
-            "label": STATUS_MAP.get(project_main.get("RAG"), "On hold"),
+            "label": STATUS_MAP.get(project_main.get("RAG"), "Yet To Start"),
             "percent_complete": project_main.get("% Completed"),
             "eta": format_date_to_iso(project_main.get("ETA")),
         },
@@ -272,7 +292,7 @@ def get_project_details(target_project: str):
                 "due_date": format_date_to_iso(m.get("Due Date")),
                 "milestone": m.get("Milestone"),
                 "completion": m.get("% Completion"),
-                "status": STATUS_MAP.get(m.get("RAG"), "Unknown"),
+                "status": STATUS_MAP.get(m.get("Status"), "Unknown"),
             }
             for m in milestone_rows
             if m.get("Project") == actual_name
