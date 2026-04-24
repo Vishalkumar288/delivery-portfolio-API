@@ -1,13 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .api.routes import delivery, tickets, analytics
-from .core.config import ALLOWED_ORIGINS
+#from .core.config import ALLOWED_ORIGINS
 
 app = FastAPI(title="Project Management API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
