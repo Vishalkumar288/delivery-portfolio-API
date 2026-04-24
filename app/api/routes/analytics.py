@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 from app.api import deps
 from app.services import analytics_services as service
+from typing import Optional
 
 router = APIRouter(prefix="/analytics", tags=["RCA Analytics"])
 
